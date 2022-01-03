@@ -1,0 +1,672 @@
+\documentclass{article}
+\usepackage{amsmath}
+\begin{document}
+\begin{titlepage}
+  \begin{center}
+      \vspace*{1cm}
+      
+      \textbf{Project 2 MATH523}
+      
+      \vspace{0.5 cm}
+      
+      \textbf{Modeling BTC Options}
+      
+      \vspace{1.5cm}
+      
+      \textbf{Farukh Sarkulov}
+      
+      \vspace{0.5 cm}
+      
+      \textbf{07/30/2021}
+  \end{center}
+\end{titlepage}
+
+\section{Introduction}
+\paragraph{BTC Explained}
+Bitcoin (BTC) and other crytpocurrencies are touted as decentralized currency that can be used to purchase goods and services. Cryptocurrencies operate on blockchain technology, a concept that serves to justify cryptocurrencies as a legitimate store of value. The blockchain is a finite length of various "blocks" that are chained together through various servers of people holding BTC. The idea is that this blockchain exists on many devices and is not centrally located which is meant to increase anonymity and system resiliency. The blockchain is mined for BTC through an algorithmic process. Miners use networks of computers to constantly execute one algorithm in the hopes of extracting coins from the blockchain. The coins are extracted through a "Proof of work" model where the algorithm runs and provides justification for the coin extraction. Once the proof is completed the coin is successfully mined. The idea is that the value of BTC is tethered to the amount of BTC available through mining. However, BTC has been criticized for being highly speculative and un-grounded in any economic reality. This is supported by the fact that BTC is not used a means of purchasing, it is mainly viewed as an asset much like a stock but with greater volatility (3). 
+\paragraph{}
+All transactions that occur using BTC are permanently recorded on a "ledger", the idea being that this type of ledger removes the middle man in the process. All transactions are permanent and cannot be deleted from the ledger once the transaction is made. BTC is sent between two BTC wallets and the ledger will record how much BTC was sent to who and from whom. Names are not given but instead a unique alphanumeric wallet key is recorded. BTC users have a public and private key, a public key for transactions among others, and a private key to access their own BTC (3).  
+\paragraph{}
+The goal of this project is to accurately predict Bitcoin option prices using a combination of Black-Scholes Merton formulas and other stochastic processes. First we will analyze the historical data for bitcoin to get a sense of if it's mean reverting, how much volatility there is in the market, and to derive important statistical values such as mean and standard deviation (2,6).
+
+\paragraph{}
+In part 1 of this project we will do a historical data analysis and use various statistical tests to inform us about our data and to inform us about what model might be best for predicting option prices. We will pull data from Yahoo Finance and plot the overall historical data as a time series. We will also derive the daily returns and plot those to get a sense of if there is some mean reversion. We will be using \emph{quantmod} to pull the data and calculate the daily returns. To test how much mean reversion there is in our data, we will employ the Augmented Dickey Fuller (ADF) Test and the Hurst Test (2,4).
+
+\paragraph{}
+The Augmented Dickey Fuller Test is a unit root test that tests for stationarity. A time series has stationarity if a shift in time does not cause a change in the shape of the distribution of the data. Stationarity correlates with mean, variance, and covariance remaining constant over time. The null hypothesis in an ADF test is that there is a unit root and the alternate hypothesis essentially says that the time series has stationarity. The ADF relies on selecting the appropriate regression model. The ADF is applied to the following model (2):
+\begin{center}
+$\Delta y_{t} = \alpha + \beta t +\gamma y_{t-1}+\delta_{1}\Delta y_{t-1}...+\delta_{p-1}\Delta y_{t-p+1}+\epsilon_{t}$\\
+\vspace{2mm}
+$\alpha$ is a constant, $\beta$ is the time trend coefficient, and p is the lag order of the autoregressive process. 
+\end{center}
+
+\paragraph{}
+The other test that was used to test the mean-reversion and stationarity of our time series was the Hurst Test. The Hurst Test is a measure of long-term memory of a time series. The Hurst Test relates the autocorrelations of the time series and the rate at which these autocorrelations decrease as lag between pairs of values increases. The Hurst Exponent (H) is often referred to as the index of dependence. A Hurst Exponent value greater than 0.5 indicates long-term positive autocorrelation, meaning that a high value will likely be followed by a high value as we move further in the time series. A Hurst Exponent value less than 0.5 indicates a time series with long-term switching, meaning that a high value will likely be followed by a smaller value as we move further in the time series. A Hurst Exponent value of 0.5 indicates a completely uncorrelated series (4). 
+
+\section{Historical Data Analysis}
+
+
+
+<<warning = F, message=F,figure=T ,echo=FALSE>>=
+library(quantmod)
+library(fBasics)
+library(tidyr)
+library(TSA)
+library(urca)
+library(pracma)
+library(zoo)
+library(ggplot2)
+#pulling BTC historic daily data
+getSymbols("BTC-USD",src = 'yahoo', from =as.Date("2018-1-01"), 
+           to =as.Date("2021-09-23") )
+btc <- `BTC-USD`
+BTCClose <- btc$`BTC-USD.Close`
+BTCClose <- na.omit(BTCClose)
+BTCOpen <- btc$`BTC-USD.Open`
+
+
+#Graphics
+#i.) timeseries of BTCAdj
+plot.xts(BTCClose,
+         main = "Bitcoin Price Time Series From January 2018 to June 2021",
+         xlab = "Date", ylab = "Price")
+
+#chart series for daily returns of BTC
+chart_Series(dailyReturn(btc))
+stats_btc <- basicStats(btc)
+
+daily_return <- dailyReturn(btc)
+basicStats(daily_return)
+
+
+#deriving the true mean and true sd from the sample mean and sample variance
+samp_mean <- mean(daily_return)
+samp_sd <- sqrt(var(daily_return))
+
+tru_sd <- as.numeric(samp_sd/(sqrt(365)))
+tru_mean <- as.numeric((samp_mean/365)+(0.5)*(tru_sd^2))
+
+
+#plotting the histogram of standardized daily returns with a standard normal distribution N(0,1)
+t <- seq(1,1271,1)
+theor <- rnorm(t,mean = 0, sd=1)
+st_daily <- (daily_return-mean(daily_return))/stdev(daily_return)
+hist(st_daily, breaks = 50, col ="blue", ylim = c(0,1), 
+     freq=F,main = "Histogram of Standardized Daily Returns")
+legend("topright",legend= c("BTC Daily Returns","N(0,1)"), 
+       col = c("blue","red"), lty = 1, cex = 0.5)
+par(new=T)
+lines(density(theor), col = "red",lwd=2 )
+basicStats(st_daily)
+@
+\section{Historical Data Results}
+The histogram plot shows the standardized daily returns for BTC prices from January 1, 2018 to June 28, 2021. Over it we plot a random normal variable over the same time interval (1273) to see how our data compares to a normal distribution. Overall the spread of our histogram aligns fairly well with the normal density but extends a little further because of a few outliers in the data. The peak in our daily returns data is nearly twice the size of the normal distribution implying that there is volatility in the data that is not captured accurately in a normal distribution. From our analysis we were also able to calculate the sample mean and sample variance, which we will use to solve for the true mean and true standard deviation given by the following formulas:
+
+\begin{center}
+$\mu = \frac{\hat{\mu}}{\Delta t}+\frac{\sigma^{2}}{2}$\\
+\vspace{2mm}
+$\sigma = \frac{\hat{\sigma}}{\sqrt{\Delta t}}$
+\end{center}
+Below are the following statistics for the daily return data, as well as the calculated true mean and true standard deviation.We see that from our excess kurtosis that our data is leptokurtic (tails fatter than the normal), implying greater volatility in our data. 
+\begin{center}
+\begin{tabular}{ |c| c | c | c | c | c | c | c | }
+\hline
+ $\mu$ & $\hat{\mu}$ & $\hat{\sigma^{2}}$ & $\sigma^{2}$ & $\hat{\sigma}$ & $\sigma$ & Skewness & Excess Kurtosis \\
+\hline
+ 6.45e-06 & 0.001536 & 0.001636 & 4.482e-06 & 0.0404 & 0.00211 & -0.44818 & 4.823 \\
+\hline
+\end{tabular}
+\end{center}
+
+<<figure = T,echo=FALSE >>=
+#analyzing correlation between yesterday and today price
+btc.ts <- ts(as.vector(btc$`BTC-USD.Close`),start=c(2018,2021), frequency = 365)
+plot(y=btc.ts, x=zlag(btc.ts), xlab = "BTC Price Yesterday ($)",
+     ylab = "BTC Price Today ($)",
+     main = "Plot of Autocorrelation for Lag 1")
+@
+\section{Correlation Analysis}
+\paragraph{}
+The autocorrelation plot between BTC Price Today and BTC Price Yesterday shows a strong correlation in the initial stages of BTC when it's price was under \$20000.As the price increases the correlation becomes less strong. 
+
+<<figure =T, echo =FALSE >>=
+x = zlag(btc.ts)
+index <- 2:length(x)
+cor(btc.ts[index],x[index])
+basicStats(x)
+
+#testing mean reversion using ADF test and Hurst Test
+ADF_results <- summary(ur.df(daily_return,type = "drift",lags=1))
+Hurst_results <- hurstexp(daily_return)
+@
+\section{Hurst \& ADF Test Analysis}
+\paragraph{}
+The presence of a unit root means that the time series is non-stationary. From our ADF Test, our p-value is less than the significance level (0.05) but the ADF statistic is larger than any of our critical values. Because the p value is less than the significance level we can reject the null hypothesis and take the series to be stationary. However, these results slightly disagree with our Hurst Test results. 
+\paragraph{}
+From the Hurst Test we are given a corrected empirical Hurst Exponent value of 0.59 which is greater than 0.5, indicating a trending series where high values are often followed by high values. This suggests to us that our data is not very mean reverting. 
+\paragraph{}
+From the Hurst and ADF test, we know that we have a trending time series with some stationarity. When we see the plot of the daily returns, there does seem to be some mean reversion in the time series. 
+<<echo=FALSE>>=
+
+#calculating half-life for mean reversion
+dr.lag <- lag(daily_return,-1)
+delta.dr <- diff(daily_return)
+df <- cbind(daily_return,dr.lag,delta.dr)
+df <-df[-1,]
+regress.results <- lm(delta.dr ~dr.lag,data=df)
+lambda <- summary(regress.results)$coefficients[2]
+half.life <- -log(2)/lambda
+@
+\section{Half Life \& Mean Reversion Analysis}
+In the above code I attempted to determine how long it takes for mean reversion to occur. To do this I calculated half life using the known formula:
+\vspace{2mm}
+\begin{center}
+$t_{1/2}=\frac{ln(2)}{\lambda}=\tau ln(2)$\\
+\vspace{2mm}
+$\lambda$ is the decay constant\\
+$\tau$ is the mean lifetime\\
+$t_{1/2}$ is the half life
+\end{center}
+
+<<message =F,warning=F, figure = T, echo=FALSE,tidy=TRUE>>=
+library(pins)
+library(skimr)
+library(prophet)
+library(stochvol)
+library(MLmetrics)
+#board_register(name = "pins_board", 
+               #url = "https://raw.githubusercontent.com/predictcrypto/pins/master/", 
+               #board = "datatxt")
+
+#cryptodata <- pin_get(name = "hitBTC_orderbook")
+
+#skim(cryptodata)
+
+#implementing SCVJ Model
+#here we sample our data to determine parameters for our SV model
+logreturns <- logret(BTCClose, demean = TRUE)
+plot(logreturns, type= "l",ylab = "log of daily returns BTC", xlab = "Date", main ="Demeaned Log Daily Returns of BTC")
+res_sv <- svsample(logreturns, designmatrix = "ar1")
+
+#here we calculate the estimated volatilities for a 100 day out prediction
+volplot(res_sv,forecast = 100, dates = daily_return$date[seq_along(res_sv)])
+
+#These plots show us the density of our SV parameters mu, phi, and sigma
+paradensplot(res_sv,showobs = FALSE)
+residual <- resid(res_sv)
+sv_parameters <- summary(res_sv)
+plot(residual, seq(1,1358,1))
+
+sv_sim <- svsim(length(daily_return),mu = -7.087,phi = .812, sigma = .741, nu = Inf,rho=0)
+par(mfrow = c(2,1))
+plot(sv_sim)
+
+summary(sv_sim)
+par(mar=c(3.5, 3.5, 2, 1), mgp=c(2.4, 0.8, 0), las=1,xpd =TRUE)
+plot(x= seq(1,1358,1),y = daily_return,ylim= c(-0.35,0.3), xlab = "Index of Days",ylab="Daily Returns", main = "Comparing True Daily Returns to Simulated SV Returns",type = "l",col = "blue")
+lines(sv_sim$y, col ="red")
+legend(x=100, y = -1, inset = c(0,-0.75), xpd =TRUE, legend = c("True Returns","SV Predicted Returns"), col = c("blue","red"),bty="n",lty = 1:1, cex = .3, pt.cex=20)
+
+#Comparing MSE and assessing accuracy of the simulated returns
+returns_compare <- cbind(daily_return,sv_sim$y)
+MSE_returns <- mean((daily_return - sv_sim$y)^2)
+
+#We will derive the associated simulated closing prices using the simualted daily returns. We will asumme we know the opening price of that day and using that infomration will derive the closing price. We will then plot those prices and see how close they get to the actual prices
+sim_returns <- sv_sim$y
+sv_btc_prices <- rep(0, length(daily_return))
+for (i in 1:length(daily_return)){
+  sv_btc_prices[i] <- BTCOpen[[i]]*(1-sim_returns[[i]])
+}
+par(mar=c(5.1,4.1,4.1,2.1),mgp=c(3,1,0),las=0)
+plot(x = seq(1,1358,1),y = BTCClose, type = "l", col = "red", xlab = "Index of Days", ylab = "BTC Closing Price", main = "True BTC Closing Price VS Simulated SV BTC Closing Price")
+lines(sv_btc_prices, col = "blue")
+legend(x = 1, y= 60000, legend = c("True BTC Price", "SV Predicted BTC Price"), col =c("red","blue"),lty = 1:1,cex =0.75,box.lty = 0,bg = "transparent")
+
+closeprice_compare <- cbind(BTCClose,sv_btc_prices)
+closingprices <- 0
+
+#Calculating MSE between the SV predicted prices and the true prices
+for (i in 1:length(sv_btc_prices)){
+  closingprices <- (1/length(sv_btc_prices))*(sum((BTCClose[[i]]-sv_btc_prices[[i]])^2))
+}
+
+#We want to use the results of our SV simulation to output options prices using the Heston Model. TO use the Heston Model, we need to calculate the required parameters.
+
+library(sandwich)
+library(NMOF)
+library(readxl)
+
+Options_Data_Derebit_Compiled <- readxl::read_xlsx("Options_Data_Derebit_Compiled.xlsx")
+predicted_calls <- rep(0,nrow(Options_Data_Derebit_Compiled))
+predicted_puts <- rep(0,nrow(Options_Data_Derebit_Compiled))
+
+s0_list <- Options_Data_Derebit_Compiled[[1]]
+t_list <- Options_Data_Derebit_Compiled[[2]]/365
+k_list <- Options_Data_Derebit_Compiled[[3]]
+callprice <- Options_Data_Derebit_Compiled[[5]]
+putprice <- Options_Data_Derebit_Compiled[[7]]
+
+heston_predicted_call_options <- rep(0,77)
+longrun_var_svsim <- sv_sim$vol0
+for(i in 1:length(heston_predicted_call_options)){
+  
+  heston_predicted_call_options[i] <- callHestoncf(s0_list[i],k_list[i],t_list[i],r=.05,q=0,v0 =.0527,vT =longrun_var_svsim,rho =0,k = half.life,sigma = sv_sim$vol[i])
+  
+}
+
+plot(x=k_list,y = heston_predicted_call_options,xlab = "Strike Price", ylab = "BTC Call Option Price", main = "Heston Call Option Prediction VS True Call Option",col = "blue",pch=2)
+points(x=k_list, y= callprice, col = "red")
+legend('topright',legend = c("Heston Prediction","True Call Price"),col = c("blue","red"),pch = 2:1,cex=0.75)
+
+plot(x=k_list,y=predicted_calls, col ="blue", xlab = "Strike Price",ylab = "Call Option Price", main = "Heston Call Price VS BSM Call Price")
+points(x=k_list, y=heston_predicted_call_options, col = "red",pch=2)
+legend("topright", legend = c("BSM Call Price","Heston Call Price"), col = c("blue", "red"), pch =2:1 ,cex = 0.75)
+
+#See here that the SV Heston Model does not improve our results greatly. The predicted call prices are near identical with the exception of a few points around K = 40k. We will now test MAPE between both predictions to see which one give us better results
+
+#Calculating MAPE between the SV Heston Calls and the true prices
+for (i in 1:length(heston_predicted_call_options)){
+  Heston_call_MAPE <- (1/length(heston_predicted_call_options))*(sum((abs(heston_predicted_call_options[i]-callprice[i]))/callprice[i]))
+}
+
+#Calculating MAPE between the BSM and true prices (CALL)
+for (i in 1:length(predicted_calls)){
+  BSM_call_MAPE <- (1/length(predicted_calls))*(sum((abs(predicted_calls[[i]]-callprice[i]))/callprice[i]))
+}
+MAPE_diff <- abs(BSM_call_MAPE- Heston_call_MAPE)
+
+#From the Mean Absolute Percentage Error we see the Heston Model provides minimal improvements to our predicted call prices. 
+@
+\section{Stochastic Volatility Analysis}
+\paragraph{}
+In the above chunk of code I tested a stochastic volatility model on the data to get a sense of the volatility inherent in the daily returns. We create a support vector sample from the given daily return data and use that data to create volatility plot, trying to predict volatility for 365 days. From the volatility graph we get the following estimated volatilities for 5\%/50\%/95\% posterior quantiles (1\%,3\%,8\%). 
+
+\paragraph{}
+The paradensity plots display plots for the density estimates for the posterior distribution of $\mu$, $\sigma$, and $\phi$. The plots are for our stochastic volatility (SV) samples that were calculated using our daily return data. I think that expanding on this SV model will give us better estimated option prices when using the Black-Scholes Merton pricing method. From the density plots, we see that all three parameters are fairly normal but have varying levels of skewness. We use these derived parameters to simualte a stochastic volatility process for the same length of time that our dataset looks at (1358 days). The simulation then provides us with simulated daily returns that can be used to derive BTC Closing Prices. We will then thake the MSE of both the simulated daily returns and the derived BTC Closing prices to see how accurate the stochastic volatility model was. 
+
+\paragraph{}
+We analyze the Stochastic Volatility (SV) Model to account for shortcomings in the Black-Scholes Merton (BSM) Model. BSM assumes that the underlying volatility of an asset is constant over the life of the derivative thereby unaffected by changes in the price level of of the underlying security. In the SV model we assume that the volatility of the underlying price is a stochastic process instead of being constant. Below is the mathematical represenetaion of the SV model:
+\begin{center}
+$\textbf{y} = (y_{1},y_{2},...,y_{n})^{T}$\\
+\vspace{1 mm}
+$\textbf{y}$ is a vector of returns with mean zero\\
+\vspace{1 mm}
+$y_{t}|h_{t} \sim N(0, e^{h_{t}})$\\
+\vspace{1 mm}
+$h_{t}|h_{t-1},\mu,\phi,\sigma_{n} \sim N(\mu + \phi(h_{t-1}-\mu),\sigma_{n}^{2})$\\
+\vspace{1mm}
+$h_{0}|\mu,\phi,\sigma_{n} \sim N(\mu,\frac{\sigma_{n}^{2}}{(1-\phi^{2})})$\\
+\vspace{3mm}
+$N(\mu,\sigma_{n}^{2})$ is normal distribution with mean $\mu$ and variance $\sigma_{n}^{2}$\\
+\vspace{1 mm}
+$\theta = (\mu,\phi,\sigma_{n})^{T}$ is a vector of parameters where:\\
+\vspace{1mm}
+$\mu$ = level of log variance\\
+\vspace{1 mm}
+$\phi$ = persistence of log variance\\
+\vspace{1 mm}
+$\sigma_{n}$ = volatility of log variance\\
+\vspace{1mm}
+$\textbf{h} = (h_{0},h_{1},...,h_{n}$ = latent time varying process (log-variance process)
+\end{center}
+First, the true daily returns are sampled using a stochastic volatility process, which simulates from a joint posterior distribution from parameters $\mu$, $\phi$, and $\rho$. The sampling also provides latent-log volatilities $(h_{0}, h_{1},..., h_{n})$. The derived parameters are then used to simulate returns for 1358 days. The simulated daily returns are then plotted against the true daily returns and the MSE is calculated to test the accuracy of the simulation. The daily returns are then used to calculate simulated BTC Closing prices using the defined formula for daily returns:
+\begin{center}
+$Daily Returns =\frac{Opening Price - Closing Price}{Opening Price}$\\
+\vspace{2mm}
+$Closing Price = Opening Price(1 - Daily Returns)$
+\end{center}
+
+\paragraph{Analysis of SV Predictions}
+The derived simulated daily returns when plotted against the true returns are near identical except for the fact that the simulated returns are shifted by an interval. This is obvious because we sampled our data with Lag 1, i.e the model only used one data point prior to simulate the next point in time. The simulated daily returns are then used to calculate simulated BTC Closing Prices which are then plotted against the true BTC Closing prices. The results again show that the data is near identical except for the shift between the simulated data and the true data. 
+
+Using the parameters derived from the SV simulation we simulate some BTC call option prices. To derive call option prices using the SV parameters we take advantage of the Heston Model for pricing options, which differs a little from the classical Black-Scholes Model (BSM). The Heston Model assumes that volatility is arbitrary and not constant as assumed in the BSM. The Heston Model is set up as follows:
+
+\begin{center}
+$dS_{t}=rS_{t}dt+\sqrt{v_{t}}S_{t}dW_{t}^{s}$\\
+\vspace{1mm}
+$dv_{t}=k(\theta-v_{t})dt+\sigma\sqrt{v_{t}}dW_{t}^{v}$\\
+\vspace{4mm}
+where $S_{t}$ = asset price at time t\\
+r = risk free interest rate\\
+$\sqrt{v_{t}}$ = volatility (sd)\\
+$\sigma$ = volatility of volatility\\
+$\theta$ = long term price variance\\
+k = rate of reversion to $\theta$ (half-life)\\
+$W_{t}^{S}$ = Brownian Motion of the assets price\\
+$W_{t}^{v}$ = Brownian Motion of the assets variance
+\end{center}
+
+We then take advantage of an existing global function called \emph{CallHestoncf} to calculate the Heston call option prices given the parameters. The volatility data is taken from our SV simuation over our BTC data and the value for k was calculated prior when we were testing for mean stationarity. The long term variance is calculated using the global function \emph{lrvar}. Once we calculate the Heston call option values we then plot the values against the true call option prices and the BSM derived call options prices. The results show little improvement in precision when using the Heston Model versus BSM. In fact, when we analyze the Mean Absolute Percentage Error (MAPE) for both Heston and BSM we get values of 0.0129707 (Heston) and 0.01298701 (BSM). When we look at the absolute difference between the results we see that the difference is 1.627e-05 which is very small. The plots and the calculated MAPE values tell us that the Heston Model does not improve on the BSM much at all for our data. 
+
+
+<<message =F,warning=F, figure = T, tidy=TRUE,echo=FALSE>>=
+#seeing how BSM model holds up 
+library(ragtop)
+library(qrmtools)
+
+
+for (i in 1:77) {
+  predicted_calls[i] <- blackscholes(callput = 1,s0_list[i],k_list[i],
+                                     r=.05,t_list[i],vola=tru_sd)
+}
+for (j in 1:77) {
+   predicted_puts[j] <- blackscholes(callput =-1,s0_list[j],k_list[j],
+                                     r=.05,t_list[j],vola=tru_sd)
+}
+
+#Plotting T=10 Days for Calls
+pred_t10 <- cbind(k_list[1:19],predicted_calls[1:19],predicted_puts[1:19])
+plot(x= k_list[1:19], y = callprice[1:19],col= "red", ylim = c(0,40000),type = "p", xlab = "Strike Price (K)", ylab = "Call Option Price", main = "BSM Call Price T= 10 Days")
+par(new=T)
+points(x = k_list[1:19], y = predicted_calls[1:19], col = "blue", pch = 2)
+legend("topright",legend = c("True Call Price","BSM Call Price"), col = c("red","blue"),pch = c(1,2), cex=0.5)
+
+#Plotting T=31 Days for Calls
+pred_t31 <- cbind(k_list[20:39],predicted_calls[20:39],predicted_puts[20:39])
+plot(x= k_list[20:39], y = callprice[20:39],col= "red", ylim = c(0,40000),type = "p", xlab = "Strike Price (K)", ylab = "Call Option Price", main = "BSM Call Price T= 31 Days")
+par(new=T)
+points(x = k_list[20:39], y = predicted_calls[20:39], col = "blue", pch = 2)
+legend("topright",legend = c("True Call Price","BSM Call Price"), col = c("red","blue"),pch = c(1,2), cex=0.5)
+
+#Plotting T=59 Days for Calls
+pred_t59 <- cbind(k_list[40:59],predicted_calls[40:59],predicted_puts[40:59])
+plot(x= k_list[40:59], y = callprice[40:59],col= "red", ylim = c(0,40000),type = "p", xlab = "Strike Price (K)", ylab = "Call Option Price", main = "BSM Call Price T= 59 Days")
+par(new=T)
+points(x = k_list[40:59], y = predicted_calls[40:59], col = "blue", pch = 2)
+legend("topright",legend = c("True Call Price","BSM Call Price"), col = c("red","blue"),pch = c(1,2), cex=0.5)
+
+#Plotting T=157 Days for Calls
+pred_t157 <- cbind(k_list[60:77],predicted_calls[60:77],predicted_puts[60:77])
+plot(x= k_list[60:77], y = callprice[60:77],col= "red", ylim = c(0,40000),type = "p", xlab = "Strike Price (K)", ylab = "Call Option Price", main = "BSM Call Price T= 157 Days")
+par(new=T)
+points(x = k_list[60:77], y = predicted_calls[60:77], col = "blue", pch = 2)
+legend("topright",legend = c("True Call Price","BSM Call Price"), col = c("red","blue"),pch = c(1,2), cex=0.5)
+
+#Plotting all Call Prices and Predictions
+pred_allt <- cbind(k_list,predicted_calls,predicted_puts)
+plot(x=k_list, y = predicted_calls, col ="blue", xlab = "Strike Price (K)",ylab = "Call Option Price", main = "True & Predicted Call Price VS Strike Price")
+legend("topright", legend = c("BSM Prediction","True Call Price"), col = c("blue","red"),pch = c(1,2), cex = 0.6)
+par(new = T)
+points(x=k_list, y=callprice, col = "red", pch = 2)
+@
+\section{BSM Call Option Analysis}
+The BSM Model tracks fairly well with the actual BTC call Option Prices but it is clear from the plot that the model is not accurately modeling the volatility of BTC Call Option Prices. The true standard deviation that we derived from our sample mean and sample variance does not adequately model the volatility inherent in the underlying. We use the daily risk free interest rate listed on the Federal Reserve's website. The Fed had r = 5\%. 
+
+<<figure=T,tidy=TRUE,echo=FALSE, warning=FALSE>>=
+#Plotting T=10 Days for Puts
+plot(x= k_list[1:19], y = putprice[1:19],col= "red", ylim = c(0,40000),type = "p", xlab = "Strike Price (K)", ylab = "Put Option Price", main = "Put Price T= 10 Days")
+par(new=T)
+points(x = k_list[1:19], y = predicted_puts[1:19], col = "blue", pch = 2)
+legend("topright",legend = c("True Put Price","BSM Put Price"), col = c("red","blue"),pch = c(1,2), cex=0.5)
+
+#Plotting T=31 Days for Calls
+plot(x= k_list[20:39], y = putprice[20:39],col= "red", ylim = c(0,40000),type = "p", xlab = "Strike Price (K)", ylab = "Put Option Price", main = "Put Price T= 31 Days")
+par(new=T)
+points(x = k_list[20:39], y = predicted_puts[20:39], col = "blue", pch = 2)
+legend("topleft",legend = c("True Put Price","BSM Put Price"), col = c("red","blue"),pch = c(1,2), cex=0.5)
+
+#Plotting T=59 Days for Calls
+plot(x= k_list[40:59], y = putprice[40:59],col= "red", ylim = c(0,40000),type = "p", xlab = "Strike Price (K)", ylab = "Put Option Price", main = "Put Price T= 59 Days")
+par(new=T)
+points(x = k_list[40:59], y = predicted_puts[40:59], col = "blue", pch = 2)
+legend("topleft",legend = c("True Put Price","BSM Put Price"), col = c("red","blue"),pch = c(1,2), cex=0.5)
+
+#Plotting T=157 Days for Calls
+plot(x= k_list[60:77], y = putprice[60:77],col= "red", ylim = c(0,40000),type = "p", xlab = "Strike Price (K)", ylab = "Put Option Price", main = "Put Price T= 157 Days")
+par(new=T)
+points(x = k_list[60:77], y = predicted_puts[60:77], col = "blue", pch = 2)
+legend("topleft",legend = c("True Put Price","BSM Put Price"), col = c("red","blue"),pch = c(1,2), cex=0.5)
+
+#Plotting all Call Prices and Predictions
+plot(x=k_list, y = predicted_puts, col ="blue", xlab = "Strike Price (K)",ylab = "Put Option Price", main = "True & Predicted Put Price VS Strike Price")
+legend("topleft", legend = c("BSM Prediction","True Put Price"), col = c("blue","red"),pch = c(1,2), cex = 0.6)
+par(new = T)
+points(x=k_list, y=putprice, col = "red", pch = 2)
+@
+\section{BSM Predicted Option Prices VS Real Options Prices}
+Looking at the BSM predicted put prices compared to the real put prices we see that the BSM did an alright job of modelinng Put Option Prices. The BSM predicted put prices gave us zero for most of the predictions, for T=10, this tracked well with the real put prices but as the strike price K increased the model became less accurate.The BSM followed the trend of the real data but not closely, and some predictions were very different from the true options price at that strike price. 
+<<figure=T,tidy=TRUE,echo=FALSE,warning=FALSE>>=
+#Checking Put Call Parity
+
+putcallparP <- function(s,T,K,C,r){
+  (C-s)+(K*exp(-r*T))
+}
+putcallparC <- function(s,T,K,P,r){
+  (P+s)-(K*exp(-r*T))
+}
+priceminus_strike <- function(s,K,T,r){
+  s-K*exp(-r*T)
+}
+callminusput <- function(c,p){
+  c-p
+}
+parity_put <- rep(0,length(predicted_calls))
+parity_call <- rep(0,length(predicted_puts))
+s_kexp <- rep(0,length(predicted_calls))
+c_p <- rep(0,length(predicted_calls))
+c_p_true <- rep(0, length(predicted_calls))
+
+for (i in 1:length(predicted_puts)) {
+  parity_put[i] <- putcallparP(s0_list[[i]], t_list[[i]],k_list[[i]],predicted_calls[[i]],.05)
+  parity_call[i] <- putcallparC(s0_list[[i]], t_list[[i]],k_list[[i]],predicted_puts[[i]],.05)
+  s_kexp[i] <- priceminus_strike(s0_list[[i]],k_list[[i]],t_list[[i]],.05)
+  c_p[i] <- callminusput(predicted_calls[[i]],predicted_puts[[i]])
+  c_p_true[i] <- callminusput(callprice[i],putprice[i])
+}
+cbind(c_p_true,c_p,s_kexp)
+plot(x = k_list,y = c_p, col =  "red", main = "call minus puts VS strike", xlab = "Strike Price (K)", ylab = "calls minus puts")
+par(new=T)
+points(x=k_list,y=c_p_true, pch =2, col = "blue")
+legend("bottomleft", legend = c("(BSM Call, BSM Put)","(Real Call, Real Put)"), pch = 1:2, col = c("red","blue"), cex = 0.7, text.width = 2, bty = "n", pt.cex = 1.25)
+@
+\section{Put Call Parity Analysis}
+To check the put call parity we take our predicted put and call option prices and compare them with the real put and call options prices. We re-write the put call parity as follows:
+\begin{center}
+$C-P=S-Ke^{-rT}$
+\end{center}
+We calculate the LHS using both the predicted and real prices and plot the two sets of data on the same plot as a function of strike price. We see that put call parity does not necessarily hold but the differences in the LHS values are not drastic. 
+
+<<warning=F,message=F,figure=T,tidy=TRUE,echo=FALSE,warning=FALSE>>=
+library(derivmkts)
+#calculating implied volatility and graphing volatility smile
+imply_vol_call <- rep(0,length(k_list))
+imply_vol_put <- rep(0,length(k_list))
+for (i in 1:length(k_list)) {
+  imply_vol_call[i] <- bscallimpvol(s0_list[[i]],k_list[[i]],.05,t_list[[i]],0,callprice[i])
+  imply_vol_put[i] <- bsputimpvol(s0_list[[i]],k_list[[i]],.05,t_list[[i]],0,putprice[i])
+  
+}
+imply_vol_call <- as.numeric(imply_vol_call)
+imply_vol_put <- as.numeric(imply_vol_put)
+plot(x = k_list, y = imply_vol_call, ylab = "Implied Volatility", xlab = "Strike Price", main = "Implied Volatility VS Strike", col = "red")
+legend("topright", legend = c("IV Call Option","IV Put Option"), pch = 1:2, 
+       col = c("red","blue"), cex=0.6)
+par(new=T)
+points(x=k_list,y=imply_vol_put, col = "blue", pch = 2)
+@
+\section{Implied Volatility Analysis}
+From the above graph we see a "volatility smile" present. This implies that the mean of our data changes as the strike price increases. Implied volatility increases when the underlying asset of an option is out of the money, or in the money, but not when it is at the money. 
+
+
+\section{RNN-LSTM Model}
+
+<<warning=F,message=F,figure=T,tidy=TRUE,echo=FALSE,warning=FALSE>>=
+#Here we will implement a RNN-LSTM Model referencing past projects
+
+
+library(devtools)
+library(tensorflow)
+library(keras)
+library(reticulate)
+#use_condaenv('r-reticulate',required = TRUE)
+
+library(timetk)
+library(recipes)
+library(dplyr)
+
+
+colnames(BTCClose) <- "closeprice"
+btcclose_tib <- tk_tbl(BTCClose[1:1350])
+
+#normalize, scale, and center the closing price tibble
+normed <- recipe(closeprice~., btcclose_tib) %>% step_sqrt(closeprice) %>% step_center(closeprice) %>% step_scale(closeprice) %>% prep()
+
+normed_data <- bake(normed, btcclose_tib)
+
+
+train_x <- normed_data$closeprice[1:800]
+train_x <- array(train_x, dim = c(length(train_x),1,1))
+
+train_y <- normed_data$closeprice[2:801]
+train_y <- array(train_y, dim = c(length(train_y),1))
+
+test_x <- normed_data$closeprice[800:1349]
+test_x <- array(test_x, dim = c(length(test_x),1,1))
+
+real_y <- normed_data$closeprice[801:1350]
+real_y <- array(real_y, dim = c(length(real_y),1))
+#Model Construction
+
+#split into 3 subsets, we will train the models on intervals and then compile the predictions 
+
+trainx_1 <- train_x[1:200]
+trainx_1 <- array(trainx_1, dim = c(length(trainx_1),1,1))
+
+trainx_2 <- train_x[150:349]
+trainx_2 <- array(trainx_2, dim = c(length(trainx_2),1,1))
+
+trainx_3 <- train_x[300:499]
+trainx_3 <- array(trainx_3, dim = c(length(trainx_3),1,1))
+
+trainx_4 <- train_x[450:649]
+trainx_4 <- array(trainx_4, dim = c(length(trainx_4),1,1))
+
+trainy_1 <- train_y[2:201]
+trainy_1 <- array(trainy_1, dim = c(length(trainy_1),1,1))
+trainy_2 <- train_y[151:350]
+trainy_2 <- array(trainy_2, dim = c(length(trainy_2),1,1))
+
+trainy_3 <- train_y[301:500]
+trainy_3 <- array(trainy_3, dim = c(length(trainy_3),1,1))
+
+trainy_4 <- train_y[451:650]
+trainy_4 <- array(trainy_4, dim = c(length(trainy_4),1,1))
+
+testx_1 <- normed_data$closeprice[201:250]
+testx_1 <- array(testx_1, dim = c(length(testx_1),1,1))
+
+testx_2 <- normed_data$closeprice[350:399]
+testx_2 <- array(testx_2, dim=c(length(testx_2),1,1))
+
+testx_3 <- normed_data$closeprice[500:549]
+testx_3 <- array(testx_3, dim=c(length(testx_3),1,1))
+
+testx_4 <- normed_data$closeprice[650:699]
+testx_4 <- array(testx_4, dim=c(length(testx_4),1,1))
+
+realy_1 <- normed_data$closeprice[201:250]
+realy_1 <- array(realy_1, dim = c(length(realy_1),1,1))
+
+realy_2 <- normed_data$closeprice[350:399]
+realy_2 <- array(realy_1, dim = c(length(realy_2),1,1))
+
+realy_3 <- normed_data$closeprice[500:549]
+realy_3 <- array(realy_3, dim = c(length(realy_3),1,1))
+
+realy_4 <- normed_data$closeprice[650:699]
+realy_4 <- array(realy_4, dim = c(length(realy_4),1,1))
+#Here we will do k-fold cross validation to determine the best model to run, i.e number of neurons and hidden layers
+library(caret)
+
+trctrl <- trainControl(method = "cv", number = 10, savePredictions = TRUE)
+fitcheck <- train(factor(closeprice)~., data =btcclose_tib, method = "naive_bayes", trControl = trctrl)
+#test/train split
+
+
+
+set.seed(1350)
+batch <- 10
+epoch <- 75
+
+model <- keras_model_sequential() #initiate module
+step <- 2
+#this is a 2 hidden layer one output layer RNN
+nn_model <- model %>% 
+  layer_lstm(units = 75, input_shape=c(1,1),batch_size = batch,return_sequences = TRUE, stateful = TRUE) %>%
+  layer_lstm(units = 50,batch_size = batch,return_sequences = TRUE,activation = "tanh", stateful = TRUE) %>%
+  layer_dense(units =1) %>%
+  compile(loss = "mse", optimizer = "adam", metric = "accuracy")
+
+model2 <- nn_model %>% fit(x=train_x,y = train_y, batch_size = batch, epochs = epoch, validation_split=0.1, verbose =1 )
+plot(model2)
+
+prediction <- model %>% predict(test_x,batch_size = batch)
+
+plot(prediction, type = "l", ylim = c(-1, 3), main = "RNN BTC Prediction VS True BTC Price (Scaled)", ylab = "Scaled BTC Price", xlab = "Observation",col= "blue")
+lines(x= seq(1:length(prediction)), y=real_y , col= "red")
+legend("topleft", legend = c("RNN Predicted BTC Price", "True BTC Price"), col =c("blue","red"), lty = 1:1, cex = 0.5,pt.cex=2)
+
+MAE(as.numeric(prediction), as.numeric(real_y))
+#this is a 3 hidden layer one ouput layer RNN
+model <- keras_model_sequential() #initiate module
+nn_model2 <- model %>% 
+  layer_lstm(units = 100, input_shape=c(1,1),batch_size = batch,return_sequences = TRUE, stateful = TRUE) %>%
+  layer_lstm(units = 75,input_shape = c(1,1), batch_size = batch,return_sequences = TRUE,activation = "softmax", stateful = TRUE) %>%
+  layer_lstm(units = 50,batch_size = batch,return_sequences = TRUE,activation = "tanh", stateful = TRUE) %>%
+  layer_dense(units =1) %>%
+  compile(loss = "mse", optimizer = "adam", metric = "accuracy")
+
+model3 <- model %>% fit(x = train_x,y = train_y, batch_size = batch, epochs = epoch, validation_split=0.1, verbose =1)
+prediction2 <- model %>% predict(test_x, batch_size = batch)
+
+plot(prediction2, type = "l", ylim = c(-1, 3), main = "RNN BTC Prediction VS True BTC Price (Scaled)", ylab = "Scaled BTC Price", xlab = "Observation",col= "blue")
+lines(x= seq(1:length(prediction2)), y= real_y, col= "red")
+legend("topleft", legend = c("RNN Predicted BTC Price", "True BTC Price"), col =c("blue","red"), lty = 1:1, cex = 0.5)
+
+
+#4 hidden layer model with one output layer
+model <- keras_model_sequential() #initiate module
+nn_model3 <- model %>% 
+  layer_lstm(units = 100, input_shape=c(1,1),batch_size = batch,return_sequences = TRUE, stateful = TRUE) %>%
+  layer_lstm(units = 75,input_shape = c(1,1), batch_size = batch,return_sequences = TRUE,activation = "softmax", stateful = TRUE) %>%
+  layer_lstm(units = 50,batch_size = batch,return_sequences = TRUE,activation = "tanh", stateful = TRUE) %>% 
+  layer_lstm(units = 25,batch_size = batch,return_sequences = TRUE,activation = "tanh", stateful = TRUE) %>%
+  layer_dense(units =1) %>%
+  compile(loss = "mse", optimizer = "adam", metric = "accuracy")
+
+model4 <- model %>% fit(x = train_x,y = train_y, batch_size = batch, epochs = epoch, validation_split=0.1, verbose =1)
+prediction3 <- model %>% predict(test_x, batch_size = batch)
+
+plot(prediction3, type = "l", ylim = c(-1, 3), main = "RNN BTC Prediction VS True BTC Price (Scaled)", ylab = "Scaled BTC Price", xlab = "Observation",col= "blue")
+lines(x= seq(1:length(prediction3)), y= real_y, col= "red")
+legend("topleft", legend = c("RNN Predicted BTC Price", "True BTC Price"), col =c("blue","red"), lty = 1:1, cex = 0.5)
+@
+
+
+\section{RNN-LSTM Analysis}
+
+
+
+\section{Conclusion}
+From our work we see that the BTC option prices derived using the Black-Scholes Merton (BSM) Option Pricing Method tracked the trend of the real option prices well but was not an adequate representation of the true values. The BSM call prices were more accurate than the BSM put prices. The BSM call prices accurately predicted many call option prices and the amount of variance from the true value remained relatively consistent when comparing the numbers and the plots. 
+
+The BSM put option prices gave us many zero and near zero values, far more than in the call option estimates. However, there were many instances of put option prices being zero in the Derebit dataset, and the BSM correctly predicted those values. But looking at the trend lines of both the predicted and true values, it is clear that the predicted values from the BSM are far more linear in their trend. This implies that the volatility inherent in BTC option prices was not properly captured through the BSM pricing model. 
+
+Moving forward with this project, it will be important to implement a stochastic volatility model to derive proper statistical parameters. I think that the reason the BSM didn't model the prices as well as we would have hoped is because our historical data analysis relied on us assuming a normal distribution. We used the daily returns data to find sample mean and sample variance and then solved for the "true" values. I don't think these true values captured the true volatility in the prices. The paper we referenced in class found success modeling BTC options using a SV and SVCJ model that properly accounted for the jumps using a combination of poisson, normal, and exponential distributions. 
+
+The next steps in this project is to implement stochastic volatility processes to try and derive better parameters $\mu$ and $\sigma$. The idea is that by simulating the daily returns data through a stochastic volatility process we can get more accurate sample mean and sample variance that can better price the options.
+
+\section{References}
+1. Jun Hou A. Wang W. Chen C. Hardle W. 2020. Pricing Cryptocurrency Options. \emph{Journal of Financial Econometrics}\\
+
+2. Prabhakaran S. 2019. AUgmented Dickey Fuller Test(ADF Guide) - Must Read Guide. \emph{machinelearningplus.com} https://www.machinelearningplus.com/time-series/augmented-dickey-fuller-test/ \\
+
+3. Iansiti M. Lakhani K. 2017. The Truth About Blockchain. \emph{Harvard Business Review} https://hbr.org/2017/01/the-truth-about-blockchain \\
+
+4. Mansukhani S. 2012. The Hurst Exponent: Predictability of Time Series. \emph{Analytics Informs} https://pubsonline.informs.org/do/10.1287/LYTX.2012.04.05/full/ \\
+
+5. The Federal Reserve. 2021. Selected Interest Rates (Daily). \emph{The Federal Reserve}. https://www.federalreserve.gov/releases/h15/ \\
+
+6. Kastner G. Dealing with Stochastic Volatility in Time Series Using the R Package stochvol. \emph{WU Vienna University of Economics and Business} 
+https://cran.r-project.org/web/packages/stochvol/vignettes/article.pdf
+\end{document}
